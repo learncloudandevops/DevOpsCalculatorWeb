@@ -94,6 +94,7 @@ EOF
         }
 
 
+       
         stage('Deploy to Tomcat via Ansible') {
             steps {
                 withCredentials([
@@ -111,11 +112,39 @@ EOF
                         set +x
                         set -eu
 
+                        echo "=========================================="
+                        echo "Step 1: Verify Ansible SSH credential"
+                        echo "=========================================="
+
+                        test -r "$ANSIBLE_SSH_KEY"
+                        ssh-keygen -y -f "$ANSIBLE_SSH_KEY" >/dev/null
+
+                        echo "SSH private key is readable and valid."
+
+                        echo "=========================================="
+                        echo "Step 2: Test Ansible connectivity"
+                        echo "=========================================="
+
+                        ansible calculator \
+                          -i /opt/ansible-calculator/inventory.ini \
+                          -m ping \
+                          -e "ansible_user=$ANSIBLE_SSH_USER" \
+                          -e "ansible_ssh_private_key_file=$ANSIBLE_SSH_KEY"
+
+                        echo "=========================================="
+                        echo "Step 3: Prepare Ansible Vault password"
+                        echo "=========================================="
+
                         VAULT_PASS_FILE="$(mktemp)"
                         trap 'rm -f "$VAULT_PASS_FILE"' EXIT
                         chmod 600 "$VAULT_PASS_FILE"
-                        printf '%s' "$ANSIBLE_VAULT_PASSWORD" \
-                          > "$VAULT_PASS_FILE"
+                        printf '%s' "$ANSIBLE_VAULT_PASSWORD" > "$VAULT_PASS_FILE"
+
+                        unset ANSIBLE_VAULT_PASSWORD
+
+                        echo "=========================================="
+                        echo "Step 4: Deploy WAR to Tomcat"
+                        echo "=========================================="
 
                         ansible-playbook \
                           -i /opt/ansible-calculator/inventory.ini \
@@ -123,10 +152,15 @@ EOF
                           --vault-password-file "$VAULT_PASS_FILE" \
                           -e "ansible_user=$ANSIBLE_SSH_USER" \
                           -e "ansible_ssh_private_key_file=$ANSIBLE_SSH_KEY"
+
+                        echo "=========================================="
+                        echo "Ansible deployment completed successfully"
+                        echo "=========================================="
                     '''
                 }
             }
         }
+
 
 
 
