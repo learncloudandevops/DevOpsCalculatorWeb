@@ -1,4 +1,4 @@
-
+```groovy
 pipeline {
     agent any
 
@@ -57,18 +57,55 @@ pipeline {
                 '''
             }
         }
+
+        stage('Deploy to Nexus') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'nexususer',
+                        usernameVariable: 'NEXUS_USERNAME',
+                        passwordVariable: 'NEXUS_PASSWORD'
+                    )
+                ]) {
+                    sh '''
+                        set +x
+                        set -eu
+
+                        SETTINGS_FILE="$(mktemp)"
+                        trap 'rm -f "$SETTINGS_FILE"' EXIT
+
+                        cat > "$SETTINGS_FILE" <<EOF
+<settings>
+    <servers>
+        <server>
+            <id>nexus-releases</id>
+            <username>${NEXUS_USERNAME}</username>
+            <password>${NEXUS_PASSWORD}</password>
+        </server>
+    </servers>
+</settings>
+EOF
+
+                        chmod 600 "$SETTINGS_FILE"
+
+                        mvn -B -s "$SETTINGS_FILE" deploy
+                    '''
+                }
+            }
+        }
     }
 
     post {
         always {
             junit allowEmptyResults: true,
                   testResults: '**/target/surefire-reports/*.xml'
+
             archiveArtifacts artifacts: 'target/*.war',
                              fingerprint: true
         }
 
         success {
-            echo 'Build, tests, SonarQube analysis, and WAR archiving succeeded.'
+            echo 'Build, tests, SonarQube analysis, WAR verification, Nexus deployment, and artifact archiving succeeded.'
         }
 
         failure {
@@ -76,3 +113,4 @@ pipeline {
         }
     }
 }
+```
