@@ -38,7 +38,7 @@ pipeline {
                 ]) {
                     sh '''
                         mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
-                          -Dsonar.projectKey=devops-calculator-web-lakshmanan \
+                          -Dsonar.projectKey=DevOps-Calculator-Web-Lakshmanan \
                           -Dsonar.projectName="DevOps Calculator Web Lakshmanan" \
                           -Dsonar.host.url="$SONAR_HOST_URL" \
                           -Dsonar.token="$SONAR_TOKEN" \
