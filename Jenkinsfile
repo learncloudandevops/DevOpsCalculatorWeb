@@ -92,6 +92,46 @@ EOF
                 }
             }
         }
+
+
+        stage('Deploy to Tomcat via Ansible') {
+            steps {
+                withCredentials([
+                    sshUserPrivateKey(
+                        credentialsId: 'ansible-target-ssh',
+                        keyFileVariable: 'ANSIBLE_SSH_KEY',
+                        usernameVariable: 'ANSIBLE_SSH_USER'
+                    ),
+                    string(
+                        credentialsId: 'ansible-vault-password',
+                        variable: 'ANSIBLE_VAULT_PASSWORD'
+                    )
+                ]) {
+                    sh '''
+                        set +x
+                        set -eu
+
+                        VAULT_PASS_FILE="$(mktemp)"
+                        trap 'rm -f "$VAULT_PASS_FILE"' EXIT
+                        chmod 600 "$VAULT_PASS_FILE"
+                        printf '%s' "$ANSIBLE_VAULT_PASSWORD" \
+                          > "$VAULT_PASS_FILE"
+
+                        ansible-playbook \
+                          -i /opt/ansible-calculator/inventory.ini \
+                          /opt/ansible-calculator/deploy-calculator-web.yml \
+                          --vault-password-file "$VAULT_PASS_FILE" \
+                          -e "ansible_user=$ANSIBLE_SSH_USER" \
+                          -e "ansible_ssh_private_key_file=$ANSIBLE_SSH_KEY"
+                    '''
+                }
+            }
+        }
+
+
+
+
+
     }
 
     post {
