@@ -5,6 +5,7 @@ pipeline {
     environment {
         JAVA_HOME = '/usr/lib/jvm/java-21-amazon-corretto.x86_64'
         PATH = "${JAVA_HOME}/bin:${PATH}"
+        SONAR_HOST_URL = 'http://sonar.leancloudandevops.online:9000'
     }
 
     stages {
@@ -27,6 +28,26 @@ pipeline {
             }
         }
 
+        stage('SonarQube Analysis') {
+            steps {
+                withCredentials([
+                    string(
+                        credentialsId: 'sonar-token',
+                        variable: 'SONAR_TOKEN'
+                    )
+                ]) {
+                    sh '''
+                        mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+                          -Dsonar.projectKey=devops-calculator-web \
+                          -Dsonar.projectName="DevOps Calculator Web" \
+                          -Dsonar.host.url="$SONAR_HOST_URL" \
+                          -Dsonar.token="$SONAR_TOKEN" \
+                          -Dsonar.coverage.exclusions=**/CalculatorServlet.java
+                    '''
+                }
+            }
+        }
+
         stage('Verify WAR') {
             steps {
                 sh '''
@@ -46,11 +67,11 @@ pipeline {
         }
 
         success {
-            echo 'Build and tests succeeded. WAR artifact archived.'
+            echo 'Build, tests, SonarQube analysis, and WAR archiving succeeded.'
         }
 
         failure {
-            echo 'Build failed. Review the Jenkins console output.'
+            echo 'Pipeline failed. Review the Jenkins console output.'
         }
     }
 }
