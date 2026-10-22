@@ -214,6 +214,15 @@ stage('Deploy to Tomcat via Ansible') {
             message: """SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER}
 Build URL: ${env.BUILD_URL}"""
         )
+emailext(
+    to: 'learncloudandevops@gmail.com',
+    subject: "SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+    body: """Build succeeded: ${env.JOB_NAME} #${env.BUILD_NUMBER}
+Build URL: ${env.BUILD_URL}"""
+)
+
+
+
     }
 
     failure {
@@ -226,6 +235,14 @@ Build URL: ${env.BUILD_URL}"""
 Build URL: ${env.BUILD_URL}
 Please check the Jenkins console output."""
         )
+emailext(
+    to: 'lakshmanan.87@gmail.com',
+    subject: "FAILURE: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+    body: """Build failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}
+Build URL: ${env.BUILD_URL}
+Please check the Jenkins console output."""
+)
+
     }
 }
 }
