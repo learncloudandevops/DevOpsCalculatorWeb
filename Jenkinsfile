@@ -196,21 +196,36 @@ stage('Deploy to Tomcat via Ansible') {
 
     }
 
-    post {
-        always {
-            junit allowEmptyResults: true,
-                  testResults: '**/target/surefire-reports/*.xml'
+   post {
+    always {
+        junit allowEmptyResults: true,
+              testResults: '**/target/surefire-reports/*.xml'
 
-            archiveArtifacts artifacts: 'target/*.war',
-                             fingerprint: true
-        }
-
-        success {
-            echo 'Build, tests, SonarQube analysis, WAR verification, Nexus deployment, and artifact archiving succeeded.'
-        }
-
-        failure {
-            echo 'Pipeline failed. Review the Jenkins console output.'
-        }
+        archiveArtifacts artifacts: 'target/*.war',
+                         fingerprint: true
     }
+
+    success {
+        echo 'Build, tests, SonarQube analysis, WAR verification, Nexus deployment, and artifact archiving succeeded.'
+
+        slackSend(
+            channel: '#devops-builds',
+            color: 'good',
+            message: """SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER}
+Build URL: ${env.BUILD_URL}"""
+        )
+    }
+
+    failure {
+        echo 'Pipeline failed. Review the Jenkins console output.'
+
+        slackSend(
+            channel: '#devops-builds',
+            color: 'danger',
+            message: """FAILURE: ${env.JOB_NAME} #${env.BUILD_NUMBER}
+Build URL: ${env.BUILD_URL}
+Please check the Jenkins console output."""
+        )
+    }
+}
 }
