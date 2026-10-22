@@ -152,18 +152,22 @@ EOF
                         echo "Step 3: Test Ansible connectivity"
                         echo "=========================================="
 
-                        echo "SSH user: $ANSIBLE_SSH_USER"
-echo "SSH key path: $ANSIBLE_SSH_KEY"
-test -f "$ANSIBLE_SSH_KEY" || {
-    echo "ERROR: SSH private key file does not exist"
-    exit 1
-}
+echo "ANSIBLE_SSH_KEY path: $ANSIBLE_SSH_KEY"
+ls -l "$ANSIBLE_SSH_KEY"
+printf 'SSH key file exists: '
+test -f "$ANSIBLE_SSH_KEY" && echo YES || echo NO
 
-                        ansible calculator \
-                            -i /opt/ansible-calculator-lab/inventory.ini \
-                            -m ping \
-                            -e "ansible_user=$ANSIBLE_SSH_USER" \
-                            -e "ansible_ssh_private_key_file=$ANSIBLE_SSH_KEY"
+echo "Relevant environment variables:"
+env | grep -E '^(ANSIBLE_PRIVATE_KEY_FILE|ANSIBLE_SSH_KEY|WORKSPACE)=' \
+  | sed 's/ANSIBLE_SSH_KEY=.*/ANSIBLE_SSH_KEY=[masked]/'
+
+                       ansible calculator \
+    -i /opt/ansible-calculator-lab/inventory.ini \
+    -m ping \
+    -e "ansible_user=$ANSIBLE_SSH_USER" \
+    -e "ansible_ssh_private_key_file=$ANSIBLE_SSH_KEY" \
+    --private-key "$ANSIBLE_SSH_KEY" \
+    -vvvv
 
 
                             cat /opt/ansible-calculator-lab/inventory.ini
