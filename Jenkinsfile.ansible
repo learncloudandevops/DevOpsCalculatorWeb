@@ -152,11 +152,21 @@ EOF
                         echo "Step 3: Test Ansible connectivity"
                         echo "=========================================="
 
+                        echo "SSH user: $ANSIBLE_SSH_USER"
+echo "SSH key path: $ANSIBLE_SSH_KEY"
+test -f "$ANSIBLE_SSH_KEY" || {
+    echo "ERROR: SSH private key file does not exist"
+    exit 1
+}
+
                         ansible calculator \
                             -i /opt/ansible-calculator-lab/inventory.ini \
                             -m ping \
                             -e "ansible_user=$ANSIBLE_SSH_USER" \
                             -e "ansible_ssh_private_key_file=$ANSIBLE_SSH_KEY"
+
+
+                            cat /opt/ansible-calculator-lab/inventory.ini
 
                         echo "=========================================="
                         echo "Step 4: Prepare Vault password"
