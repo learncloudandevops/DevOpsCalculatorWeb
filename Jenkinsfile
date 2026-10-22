@@ -236,7 +236,7 @@ Build URL: ${env.BUILD_URL}
 Please check the Jenkins console output."""
         )
 emailext(
-    to: 'lakshmanan.87@gmail.com',
+    to: 'learncloudandevops@gmail.com',
     subject: "FAILURE: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
     body: """Build failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}
 Build URL: ${env.BUILD_URL}
