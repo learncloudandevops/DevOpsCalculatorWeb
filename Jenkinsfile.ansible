@@ -183,7 +183,7 @@ EOF
                         test -r "$PLAYBOOK"
 
                         echo "Maven version: $APP_VERSION"
-echo "Deploying artifact version: $APP_VERSION
+                        echo "Deploying artifact version: $APP_VERSION"
 
                         ansible-playbook \
                             -i "$INVENTORY" \
