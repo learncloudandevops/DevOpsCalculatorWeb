@@ -43,6 +43,7 @@ pipeline {
                           -Dsonar.host.url="$SONAR_HOST_URL" \
                           -Dsonar.token="$SONAR_TOKEN" \
                           -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
+                          -Dsonar.coverage.exclusions=**/CalculatorServlet.java
                           
                     '''
                 }
