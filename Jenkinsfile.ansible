@@ -58,6 +58,7 @@ pipeline {
         stage('Verify WAR') {
             steps {
                 sh '''
+                    set -eu
                     test -f target/calculator.war
                     ls -lh target/calculator.war
                 '''
@@ -124,6 +125,9 @@ EOF
                         set +x
                         set -eu
 
+                        INVENTORY="/opt/ansible-calculator-lab/inventory.ini"
+                        PLAYBOOK="/opt/ansible-calculator-lab/deploy-calculator.yml"
+
                         echo "=========================================="
                         echo "Step 1: Determine application version"
                         echo "=========================================="
@@ -144,33 +148,21 @@ EOF
                         echo "=========================================="
 
                         test -r "$ANSIBLE_SSH_KEY"
+                        test -f "$ANSIBLE_SSH_KEY"
                         ssh-keygen -y -f "$ANSIBLE_SSH_KEY" >/dev/null
 
                         echo "SSH private key is valid."
+                        echo "SSH username: $ANSIBLE_SSH_USER"
 
                         echo "=========================================="
                         echo "Step 3: Test Ansible connectivity"
                         echo "=========================================="
 
-echo "ANSIBLE_SSH_KEY path: $ANSIBLE_SSH_KEY"
-ls -l "$ANSIBLE_SSH_KEY"
-printf 'SSH key file exists: '
-test -f "$ANSIBLE_SSH_KEY" && echo YES || echo NO
-
-echo "Relevant environment variables:"
-env | grep -E '^(ANSIBLE_PRIVATE_KEY_FILE|ANSIBLE_SSH_KEY|WORKSPACE)=' \
-  | sed 's/ANSIBLE_SSH_KEY=.*/ANSIBLE_SSH_KEY=[masked]/'
-
-                       ansible calculator \
-    -i /opt/ansible-calculator-lab/inventory.ini \
-    -m ping \
-    -e "ansible_user=$ANSIBLE_SSH_USER" \
-    -e "ansible_ssh_private_key_file=$ANSIBLE_SSH_KEY" \
-    --private-key "$ANSIBLE_SSH_KEY" \
-    -vvvv
-
-
-                            cat /opt/ansible-calculator-lab/inventory.ini
+                        ansible calculator \
+                            -i "$INVENTORY" \
+                            -m ping \
+                            -e "ansible_user=$ANSIBLE_SSH_USER" \
+                            --private-key="$ANSIBLE_SSH_KEY"
 
                         echo "=========================================="
                         echo "Step 4: Prepare Vault password"
@@ -188,12 +180,14 @@ env | grep -E '^(ANSIBLE_PRIVATE_KEY_FILE|ANSIBLE_SSH_KEY|WORKSPACE)=' \
                         echo "Step 5: Deploy version $APP_VERSION"
                         echo "=========================================="
 
+                        test -r "$PLAYBOOK"
+
                         ansible-playbook \
-                            -i /opt/ansible-calculator-lab/inventory.ini \
-                            /opt/ansible-calculator-lab/deploy-calculator.yml \
+                            -i "$INVENTORY" \
+                            "$PLAYBOOK" \
                             --vault-password-file "$VAULT_PASS_FILE" \
+                            --private-key="$ANSIBLE_SSH_KEY" \
                             -e "ansible_user=$ANSIBLE_SSH_USER" \
-                            -e "ansible_ssh_private_key_file=$ANSIBLE_SSH_KEY" \
                             -e "artifact_version=$APP_VERSION"
 
                         echo "=========================================="
