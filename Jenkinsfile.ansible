@@ -154,6 +154,75 @@ stage('Provision Tomcat Server via Ansible') {
 
 
 
+stage('Deploy to Tomcat via Ansible') {
+    steps {
+        withCredentials([
+            sshUserPrivateKey(
+                credentialsId: 'ansible-target-ssh-student',
+                keyFileVariable: 'ANSIBLE_SSH_KEY',
+                usernameVariable: 'ANSIBLE_SSH_USER'
+            ),
+            string(
+                credentialsId: 'ansible-vault-password',
+                variable: 'ANSIBLE_VAULT_PASSWORD'
+            )
+        ]) {
+            sh '''
+                set +x
+                set -eu
+
+                export ANSIBLE_CONFIG="$WORKSPACE/ansible/ansible.cfg"
+
+                INVENTORY="$WORKSPACE/ansible/inventory.ini"
+                PLAYBOOK="$WORKSPACE/ansible/deploy-calculator.yml"
+
+                echo "Step 1: Validate Ansible files"
+                test -r "$INVENTORY"
+                test -r "$PLAYBOOK"
+                test -r "$WORKSPACE/ansible/nexus-vault.yml"
+                test -r "$ANSIBLE_SSH_KEY"
+
+                echo "Step 2: Determine the Maven version"
+                APP_VERSION="$(mvn -q -DforceStdout help:evaluate \
+                    -Dexpression=project.version)"
+                test -n "$APP_VERSION"
+                echo "Application version: $APP_VERSION"
+
+                echo "Step 3: Validate SSH key"
+                ssh-keygen -y -f "$ANSIBLE_SSH_KEY" >/dev/null
+
+                echo "Step 4: Test Ansible connectivity"
+                ansible calculator \
+                    -i "$INVENTORY" \
+                    -m ping \
+                    --private-key="$ANSIBLE_SSH_KEY" \
+                    -e "ansible_user=$ANSIBLE_SSH_USER"
+
+                echo "Step 5: Prepare temporary Vault password file"
+                VAULT_PASS_FILE="$(mktemp)"
+                trap 'rm -f "$VAULT_PASS_FILE"' EXIT
+                chmod 600 "$VAULT_PASS_FILE"
+                printf '%s' "$ANSIBLE_VAULT_PASSWORD" > "$VAULT_PASS_FILE"
+                unset ANSIBLE_VAULT_PASSWORD
+
+                echo "Step 6: Deploy application from Nexus"
+                ansible-playbook \
+                    -i "$INVENTORY" \
+                    "$PLAYBOOK" \
+                    --private-key="$ANSIBLE_SSH_KEY" \
+                    --vault-password-file "$VAULT_PASS_FILE" \
+                    -e "ansible_user=$ANSIBLE_SSH_USER" \
+                    -e "artifact_version=$APP_VERSION"
+
+                echo "Deployment succeeded for version $APP_VERSION"
+            '''
+        }
+    }
+}
+
+
+
+
 
 
 
