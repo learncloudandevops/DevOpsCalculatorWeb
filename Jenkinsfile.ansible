@@ -108,6 +108,69 @@ EOF
             }
         }
 
+
+stage('Provision Tomcat Server via Ansible') {
+    steps {
+        withCredentials([
+            sshUserPrivateKey(
+                credentialsId: 'ansible-target-ssh-student',
+                keyFileVariable: 'ANSIBLE_SSH_KEY',
+                usernameVariable: 'ANSIBLE_SSH_USER'
+            )
+        ]) {
+            sh '''
+                set -eu
+
+                export ANSIBLE_CONFIG="$WORKSPACE/ansible/ansible.cfg"
+                INVENTORY="$WORKSPACE/ansible/inventory.ini"
+
+                echo "Step 1: Test Ansible connectivity"
+                ansible calculator \
+                    -i "$INVENTORY" \
+                    -m ping \
+                    --private-key="$ANSIBLE_SSH_KEY" \
+                    -e "ansible_user=$ANSIBLE_SSH_USER"
+
+                echo "Step 2: Install Java"
+                ansible-playbook \
+                    -i "$INVENTORY" \
+                    "$WORKSPACE/ansible/install-java.yml" \
+                    --private-key="$ANSIBLE_SSH_KEY" \
+                    -e "ansible_user=$ANSIBLE_SSH_USER"
+
+                echo "Step 3: Install and configure Tomcat"
+                ansible-playbook \
+                    -i "$INVENTORY" \
+                    "$WORKSPACE/ansible/install-tomcat.yml" \
+                    --private-key="$ANSIBLE_SSH_KEY" \
+                    -e "ansible_user=$ANSIBLE_SSH_USER"
+
+                echo "Server provisioning completed."
+            '''
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        /*
+
         stage('Deploy to Tomcat via Ansible') {
             steps {
                 withCredentials([
@@ -199,7 +262,9 @@ EOF
                     '''
                 }
             }
-        }
+        }  */
+
+
     }
 
     post {
