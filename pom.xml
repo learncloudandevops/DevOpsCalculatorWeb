@@ -7,7 +7,7 @@
 
     <groupId>com.example</groupId>
     <artifactId>DevOpsCalculatorWeb-Lakshmanan</artifactId>
-    <version>1.0.11</version>
+    <version>1.0.0</version>
     <packaging>war</packaging>
 
     <name>DevOps Calculator Web - Lakshmanan</name>
@@ -41,7 +41,7 @@
         <repository>
             <id>nexus-releases</id>
             <name>Nexus Releases</name>
-            <url>http://nexus.leancloudandevops.online:8081/repository/maven-releases/</url>
+            <url>http://3.91.181.161:8081/repository/maven-releases/</url>
         </repository>
     </distributionManagement>
 
