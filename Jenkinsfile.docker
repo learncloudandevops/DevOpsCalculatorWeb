@@ -1,4 +1,3 @@
-  
 pipeline {
     agent any
 
@@ -72,15 +71,25 @@ pipeline {
 
         stage('Deploy to Tomcat Server') {
             steps {
-                sshagent(credentials: ['tomcat-server-ssh']) {
+                // Uses Jenkins' SSH private-key credential binding; does not require the SSH Agent plugin.
+                withCredentials([sshUserPrivateKey(
+                    credentialsId: 'tomcat-server-ssh',
+                    keyFileVariable: 'SSH_KEY',
+                    usernameVariable: 'SSH_CREDENTIAL_USER'
+                )]) {
                     sh '''
                         set -eu
 
-                        ssh "$DEPLOY_USER@$DEPLOY_HOST" \
+                        ssh -i "$SSH_KEY" \
+                          -o IdentitiesOnly=yes \
+                          -o StrictHostKeyChecking=accept-new \
+                          "$DEPLOY_USER@$DEPLOY_HOST" \
                           "AWS_REGION='$AWS_REGION' \
                            ECR_REGISTRY='$ECR_REGISTRY' \
                            ECR_IMAGE='$VERSIONED_IMAGE' \
                            DEPLOY_CONTAINER='$DEPLOY_CONTAINER' \
+                           DEPLOY_HOST_PORT='$DEPLOY_HOST_PORT' \
+                           DEPLOY_CONTAINER_PORT='$DEPLOY_CONTAINER_PORT' \
                            bash -s" <<'REMOTE'
                         set -eu
 
@@ -94,11 +103,11 @@ pipeline {
                         sudo docker run -d \
                           --name "$DEPLOY_CONTAINER" \
                           --restart unless-stopped \
-                          -p 8081:8080 \
+                          -p "$DEPLOY_HOST_PORT:$DEPLOY_CONTAINER_PORT" \
                           "$ECR_IMAGE"
 
                         for attempt in $(seq 1 30); do
-                          if curl -fsS http://localhost:8081/Calculator/ >/dev/null; then
+                          if curl -fsS "http://localhost:$DEPLOY_HOST_PORT/Calculator/" >/dev/null; then
                             echo "Deployment successful."
                             exit 0
                           fi
