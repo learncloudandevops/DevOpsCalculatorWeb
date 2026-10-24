@@ -17,13 +17,34 @@ pipeline {
             }
         }
 
-        stage('Verify Docker and AWS CLI') {
+        stage('Verify Tools and AWS Identity') {
             steps {
                 sh '''
                     set -eu
+                    mvn --version
                     docker --version
                     aws --version
                     aws sts get-caller-identity
+                '''
+            }
+        }
+
+        stage('Build WAR') {
+            steps {
+                sh '''
+                    set -eu
+                    test -f pom.xml
+                    grep -Eq '<packaging>war</packaging>' pom.xml || {
+                        echo "ERROR: pom.xml must contain <packaging>war</packaging>"
+                        exit 1
+                    }
+                    mvn -B clean package -DskipTests
+                    WAR_FILE="$(find target -maxdepth 1 -type f -name '*.war' -print -quit)"
+                    test -n "$WAR_FILE" || {
+                        echo "ERROR: Maven did not produce a WAR file under target/"
+                        exit 1
+                    }
+                    ls -lh "$WAR_FILE"
                 '''
             }
         }
@@ -32,9 +53,12 @@ pipeline {
             steps {
                 sh '''
                     set -eu
-                    test -f Dockerfile
-                    docker build -t "$ECR_IMAGE" .
-                    docker image inspect "$ECR_IMAGE"
+                    test -f Dockerfile || {
+                        echo "ERROR: Dockerfile not found in the project root"
+                        exit 1
+                    }
+                    docker build --pull -t "$ECR_IMAGE" .
+                    docker image inspect "$ECR_IMAGE" >/dev/null
                 '''
             }
         }
@@ -43,8 +67,8 @@ pipeline {
             steps {
                 sh '''
                     set -eu
-                    aws ecr get-login-password --region "$AWS_REGION" \\
-                      | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+                    aws ecr get-login-password --region "$AWS_REGION" |
+                      docker login --username AWS --password-stdin "$ECR_REGISTRY"
                 '''
             }
         }
@@ -62,9 +86,9 @@ pipeline {
             steps {
                 sh '''
                     set -eu
-                    aws ecr describe-images \\
-                      --region "$AWS_REGION" \\
-                      --repository-name "$REPOSITORY" \\
+                    aws ecr describe-images \
+                      --region "$AWS_REGION" \
+                      --repository-name "$REPOSITORY" \
                       --image-ids imageTag="$IMAGE_TAG"
                 '''
             }
@@ -73,15 +97,13 @@ pipeline {
 
     post {
         success {
-            echo "Docker image built and pushed successfully: ${ECR_IMAGE}"
+            echo "Successfully built and pushed ${ECR_IMAGE}"
         }
         failure {
-            echo 'Docker build or ECR push failed. Review the Jenkins console output.'
+            echo 'Docker build or ECR push failed. Review the stage logs above.'
         }
         always {
-            sh '''
-                docker logout "$ECR_REGISTRY" >/dev/null 2>&1 || true
-            '''
+            sh 'docker logout "${ECR_REGISTRY}" >/dev/null 2>&1 || true'
         }
     }
 }
