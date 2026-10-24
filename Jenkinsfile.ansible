@@ -4,7 +4,8 @@ pipeline {
     environment {
         JAVA_HOME = '/usr/lib/jvm/java-21-amazon-corretto.x86_64'
         PATH = "${JAVA_HOME}/bin:${PATH}"
-        SONAR_HOST_URL = 'http://sonar.leancloudandevops.online:9000'
+    //    SONAR_HOST_URL = 'http://sonar.leancloudandevops.online:9000'
+        SONAR_HOST_URL = 'http://http://3.91.181.161:9000'
     }
 
     stages {
@@ -35,7 +36,7 @@ pipeline {
                 withSonarQubeEnv('sonar-server') {
                     withCredentials([
                         string(
-                            credentialsId: 'sonar-token',
+                            credentialsId: 'sonar-token1',
                             variable: 'SONAR_TOKEN'
                         )
                     ]) {
