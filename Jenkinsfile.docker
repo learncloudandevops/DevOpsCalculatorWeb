@@ -1,0 +1,87 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_REGION = 'us-east-1'
+        ACCOUNT_ID = '425034746560'
+        REPOSITORY = 'awsecrdemo'
+        IMAGE_TAG = 'v1'
+        ECR_REGISTRY = "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        ECR_IMAGE = "${ECR_REGISTRY}/${REPOSITORY}:${IMAGE_TAG}"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Verify Docker and AWS CLI') {
+            steps {
+                sh '''
+                    set -eu
+                    docker --version
+                    aws --version
+                    aws sts get-caller-identity
+                '''
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh '''
+                    set -eu
+                    test -f Dockerfile
+                    docker build -t "$ECR_IMAGE" .
+                    docker image inspect "$ECR_IMAGE"
+                '''
+            }
+        }
+
+        stage('Login to Amazon ECR') {
+            steps {
+                sh '''
+                    set -eu
+                    aws ecr get-login-password --region "$AWS_REGION" \\
+                      | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+                '''
+            }
+        }
+
+        stage('Push Image to ECR') {
+            steps {
+                sh '''
+                    set -eu
+                    docker push "$ECR_IMAGE"
+                '''
+            }
+        }
+
+        stage('Verify Image in ECR') {
+            steps {
+                sh '''
+                    set -eu
+                    aws ecr describe-images \\
+                      --region "$AWS_REGION" \\
+                      --repository-name "$REPOSITORY" \\
+                      --image-ids imageTag="$IMAGE_TAG"
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Docker image built and pushed successfully: ${ECR_IMAGE}"
+        }
+        failure {
+            echo 'Docker build or ECR push failed. Review the Jenkins console output.'
+        }
+        always {
+            sh '''
+                docker logout "$ECR_REGISTRY" >/dev/null 2>&1 || true
+            '''
+        }
+    }
+}
