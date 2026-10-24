@@ -1,3 +1,4 @@
+  
 pipeline {
     agent any
 
@@ -5,11 +6,15 @@ pipeline {
         AWS_REGION = 'us-east-1'
         ACCOUNT_ID = '425034746560'
         REPOSITORY = 'awsecrdemo'
-        IMAGE_TAG = 'v2'
         ECR_REGISTRY = "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-        ECR_IMAGE = "${ECR_REGISTRY}/${REPOSITORY}:${IMAGE_TAG}"
+        ECR_IMAGE = "${ECR_REGISTRY}/${REPOSITORY}"
+        DEPLOY_HOST = '10.0.18.185'
         JAVA_HOME = '/usr/lib/jvm/java-21-amazon-corretto.x86_64'
         PATH = "${JAVA_HOME}/bin:${PATH}"
+        DEPLOY_USER = 'ec2-user'
+        DEPLOY_CONTAINER = 'calculator-app'
+        DEPLOY_HOST_PORT = '8081'
+        DEPLOY_CONTAINER_PORT = '8080'
     }
 
     stages {
@@ -19,35 +24,25 @@ pipeline {
             }
         }
 
-        stage('Verify Tools and AWS Identity') {
-            steps {
-                sh '''
-                    set -eu
-                    mvn --version
-                    docker --version
-                    aws --version
-                    aws sts get-caller-identity
-                '''
-            }
-        }
-
         stage('Build WAR') {
             steps {
                 sh '''
                     set -eu
-                    test -f pom.xml
-                    grep -Eq '<packaging>war</packaging>' pom.xml || {
-                        echo "ERROR: pom.xml must contain <packaging>war</packaging>"
-                        exit 1
-                    }
+                    export JAVA_HOME=/usr/lib/jvm/java-21-amazon-corretto.x86_64
+                    export PATH="$JAVA_HOME/bin:$PATH"
                     mvn -B clean package -DskipTests
-                    WAR_FILE="$(find target -maxdepth 1 -type f -name '*.war' -print -quit)"
-                    test -n "$WAR_FILE" || {
-                        echo "ERROR: Maven did not produce a WAR file under target/"
-                        exit 1
-                    }
-                    ls -lh "$WAR_FILE"
+                    test -n "$(find target -maxdepth 1 -name '*.war' -print -quit)"
                 '''
+            }
+        }
+
+        stage('Create Image Version') {
+            steps {
+                script {
+                    env.IMAGE_TAG = "build-${env.BUILD_NUMBER}"
+                    env.VERSIONED_IMAGE = "${env.ECR_IMAGE}:${env.IMAGE_TAG}"
+                }
+                echo "Publishing ${env.VERSIONED_IMAGE}"
             }
         }
 
@@ -55,54 +50,76 @@ pipeline {
             steps {
                 sh '''
                     set -eu
-                    test -f Dockerfile || {
-                        echo "ERROR: Dockerfile not found in the project root"
-                        exit 1
-                    }
-                    docker build --pull -t "$ECR_IMAGE" .
-                    docker image inspect "$ECR_IMAGE" >/dev/null
+                    test -f Dockerfile
+                    docker build --pull \
+                      -t "$VERSIONED_IMAGE" \
+                      -t "$ECR_IMAGE:latest" .
                 '''
             }
         }
 
-        stage('Login to Amazon ECR') {
+        stage('Push to ECR') {
             steps {
                 sh '''
                     set -eu
                     aws ecr get-login-password --region "$AWS_REGION" |
                       docker login --username AWS --password-stdin "$ECR_REGISTRY"
+                    docker push "$VERSIONED_IMAGE"
+                    docker push "$ECR_IMAGE:latest"
                 '''
             }
         }
 
-        stage('Push Image to ECR') {
+        stage('Deploy to Tomcat Server') {
             steps {
-                sh '''
-                    set -eu
-                    docker push "$ECR_IMAGE"
-                '''
-            }
-        }
+                sshagent(credentials: ['tomcat-server-ssh']) {
+                    sh '''
+                        set -eu
 
-        stage('Verify Image in ECR') {
-            steps {
-                sh '''
-                    set -eu
-                    aws ecr describe-images \
-                      --region "$AWS_REGION" \
-                      --repository-name "$REPOSITORY" \
-                      --image-ids imageTag="$IMAGE_TAG"
-                '''
+                        ssh "$DEPLOY_USER@$DEPLOY_HOST" \
+                          "AWS_REGION='$AWS_REGION' \
+                           ECR_REGISTRY='$ECR_REGISTRY' \
+                           ECR_IMAGE='$VERSIONED_IMAGE' \
+                           DEPLOY_CONTAINER='$DEPLOY_CONTAINER' \
+                           bash -s" <<'REMOTE'
+                        set -eu
+
+                        aws ecr get-login-password --region "$AWS_REGION" |
+                          sudo docker login --username AWS --password-stdin "$ECR_REGISTRY"
+
+                        sudo docker pull "$ECR_IMAGE"
+
+                        sudo docker rm -f "$DEPLOY_CONTAINER" 2>/dev/null || true
+
+                        sudo docker run -d \
+                          --name "$DEPLOY_CONTAINER" \
+                          --restart unless-stopped \
+                          -p 8081:8080 \
+                          "$ECR_IMAGE"
+
+                        for attempt in $(seq 1 30); do
+                          if curl -fsS http://localhost:8081/Calculator/ >/dev/null; then
+                            echo "Deployment successful."
+                            exit 0
+                          fi
+                          sleep 2
+                        done
+
+                        sudo docker logs --tail 100 "$DEPLOY_CONTAINER" || true
+                        exit 1
+REMOTE
+                    '''
+                }
             }
         }
     }
 
     post {
         success {
-            echo "Successfully built and pushed ${ECR_IMAGE}"
+            echo "Build and deployment succeeded: ${env.VERSIONED_IMAGE}"
         }
         failure {
-            echo 'Docker build or ECR push failed. Review the stage logs above.'
+            echo 'Pipeline failed. Check the stage logs.'
         }
         always {
             sh 'docker logout "${ECR_REGISTRY}" >/dev/null 2>&1 || true'
